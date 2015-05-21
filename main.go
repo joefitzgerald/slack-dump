@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -14,6 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/codegangsta/cli"
 	"github.com/jhoonb/archivex"
 	"github.com/nlopes/slack"
 )
@@ -24,26 +24,51 @@ func check(e error) {
 	}
 }
 
-var token string
-
 func main() {
-	flag.StringVar(&token, "token", "", "a Slack API token: (see: https://api.slack.com/web)")
-	flag.Parse()
+	app := cli.NewApp()
+	app.Name = "slack-dump"
+	app.Usage = "export channel and group history to the Slack export format"
+	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:   "token, t",
+			Value:  "",
+			Usage:  "a Slack API token: (see: https://api.slack.com/web)",
+			EnvVar: "SLACK_API_TOKEN",
+		},
+	}
+	app.Author = "Joe Fitzgerald"
+	app.Email = "jfitzgerald@pivotal.io"
+	app.Version = "0.0.1"
+	app.Action = func(c *cli.Context) {
+		token := c.String("token")
+		if token == "" {
+			fmt.Println("ERROR: the token flag is required...")
+			fmt.Println("")
+			cli.ShowAppHelp(c)
+			os.Exit(2)
+		}
+		rooms := c.Args()
+		api := slack.New(token)
+		_, err := api.AuthTest()
+		if err != nil {
+			fmt.Println("ERROR: the token you used is not valid...")
+			os.Exit(2)
+		}
 
-	rooms := flag.Args()
-	api := slack.New(token)
+		// Create working directory
+		dir, err := ioutil.TempDir("", "slack-dump")
+		check(err)
 
-	// Create working directory
-	dir, err := ioutil.TempDir("", "slack-dump")
-	check(err)
+		// Dump Users
+		dumpUsers(api, dir)
 
-	// Dump Users
-	dumpUsers(api, dir)
+		// Dump Channels and Groups
+		dumpRooms(api, dir, rooms)
 
-	// Dump Channels and Groups
-	dumpRooms(api, dir, rooms)
+		archive(dir)
+	}
 
-	archive(dir)
+	app.Run(os.Args)
 }
 
 func archive(dir string) {
