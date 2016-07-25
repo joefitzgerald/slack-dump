@@ -40,7 +40,7 @@ func main() {
 	app.Author = "Joe Fitzgerald"
 	app.Email = "jfitzgerald@pivotal.io"
 	app.Version = "0.0.1"
-	app.Action = func(c *cli.Context) {
+	app.Action = func(c *cli.Context) error {
 		token := c.String("token")
 		if token == "" {
 			fmt.Println("ERROR: the token flag is required...")
@@ -67,6 +67,7 @@ func main() {
 		dumpRooms(api, dir, rooms)
 
 		archive(dir)
+		return nil
 	}
 
 	app.Run(os.Args)
