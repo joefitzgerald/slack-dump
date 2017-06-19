@@ -167,6 +167,15 @@ func dumpChannels(api *slack.Client, dir string, rooms []string) []slack.Channel
 		dumpChannel(api, dir, channel.Conversation.ID, channel.Name, "channel")
 	}
 
+	imchannels, imerr := api.GetIMChannels()
+	check(imerr)
+
+	for _, channel := range imchannels {
+		user, err := api.GetUserInfo(channel.User)
+		check(err)
+		dumpChannel(api, dir, channel.Conversation.ID, user.Name, "im")
+	}
+
 	return channels
 }
 
@@ -200,8 +209,10 @@ func dumpChannel(api *slack.Client, dir, id, name, channelType string) {
 	var messages []slack.Message
 	if channelType == "group" {
 		messages = fetchGroupHistory(api, id)
-	} else {
+	} else if channelType == "channel" {
 		messages = fetchChannelHistory(api, id)
+	} else {
+		messages = fetchIMChannelHistory(api, id)
 	}
 
 	if len(messages) == 0 {
@@ -276,7 +287,13 @@ func fetchChannelHistory(api *slack.Client, ID string) []slack.Message {
 	history, err := api.GetChannelHistory(ID, historyParams)
 	check(err)
 	messages := history.Messages
+
+	if len(messages) == 0 {
+		return nil
+	}
+
 	latest := messages[len(messages)-1].Timestamp
+
 	for {
 		if history.HasMore != true {
 			break
@@ -284,6 +301,40 @@ func fetchChannelHistory(api *slack.Client, ID string) []slack.Message {
 
 		historyParams.Latest = latest
 		history, err = api.GetChannelHistory(ID, historyParams)
+		check(err)
+		length := len(history.Messages)
+		if length > 0 {
+			latest = history.Messages[length-1].Timestamp
+			messages = append(messages, history.Messages...)
+		}
+
+	}
+
+	return messages
+}
+
+func fetchIMChannelHistory(api *slack.Client, ID string) []slack.Message {
+	historyParams := slack.NewHistoryParameters()
+	historyParams.Count = 1000
+
+	// Fetch History
+	history, err := api.GetIMHistory(ID, historyParams)
+	check(err)
+	messages := history.Messages
+
+	if len(messages) == 0 {
+		return nil
+	}
+
+	latest := messages[len(messages)-1].Timestamp
+
+	for {
+		if history.HasMore != true {
+			break
+		}
+
+		historyParams.Latest = latest
+		history, err = api.GetIMHistory(ID, historyParams)
 		check(err)
 		length := len(history.Messages)
 		if length > 0 {
